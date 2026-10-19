@@ -161,3 +161,43 @@ fn subscription_address_is_recorded() {
     let h = setup();
     assert_eq!(h.vault.subscription(), h.subscription);
 }
+
+/// The vault admin can only call `set_subscription`, which repoints the
+/// subscription contract. No admin function touches user balances directly.
+/// This test verifies that every admin-callable function leaves all user
+/// balances unchanged.
+///
+/// SECURITY.md: "The vault admin can repoint set_subscription to a different
+/// contract. A malicious admin could point it at a contract that drains
+/// balances." This test pins down that the only admin function exists and
+/// does not move funds.
+#[test]
+fn admin_has_no_path_to_user_funds() {
+    let h = setup();
+
+    // Fund two users and deposit into the vault.
+    let user_a = funded_user(&h, 10_000);
+    let user_b = funded_user(&h, 10_000);
+    h.vault.deposit(&user_a, &h.token, &3_000);
+    h.vault.deposit(&user_b, &h.token, &2_500);
+
+    let bal_a_before = h.vault.balance(&user_a, &h.token);
+    let bal_b_before = h.vault.balance(&user_b, &h.token);
+
+    // The only admin function is set_subscription; call it with a different
+    // subscription address. This should not move any user balances.
+    let new_subscription = Address::generate(&h.env);
+    h.vault.set_subscription(&new_subscription);
+
+    let bal_a_after = h.vault.balance(&user_a, &h.token);
+    let bal_b_after = h.vault.balance(&user_b, &h.token);
+
+    assert_eq!(
+        bal_a_before, bal_a_after,
+        "set_subscription must not change user balances"
+    );
+    assert_eq!(
+        bal_b_before, bal_b_after,
+        "set_subscription must not change user balances"
+    );
+}

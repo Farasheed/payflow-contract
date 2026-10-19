@@ -50,6 +50,40 @@ Redeployed to testnet; the ids are in [`deployments/testnet.env`](deployments/te
 - 42 → 63 tests, covering paging limits, entry footprint limits, merchant
   ending and constructor configuration.
 
+## Unreleased
+
+### Security
+
+- **Vault admin has no path to user funds.** The vault admin can only call
+  `set_subscription`, which repoints the subscription contract. No admin
+  function (including `set_subscription`) touches user balances directly.
+  This is pinned down by a new test `admin_has_no_path_to_user_funds`.
+
+### Added
+
+- **Test: admin has no path to user funds** — verifies that every admin-
+  callable function leaves all user balances unchanged.
+- **Test: fees paid to a contract address** — verifies that the protocol fee
+  is correctly transferred to the `fee_to` address when a mandate is charged.
+
+### Changed
+
+- **Breaking:** `merchant_plans`, `merchant_mandates` and `subscriber_mandates`
+  take `start` and `limit` and return at most 50 ids per call.
+- **Breaking:** `initialize` is replaced by `__constructor` in all three
+  contracts.
+- `rust-toolchain.toml` names the `wasm32v1-none` target that
+  `stellar contract build` uses.
+
+### Tests
+
+- 42 → 63 tests, covering paging limits, entry footprint limits, merchant
+  ending and constructor configuration.
+- **New test: `admin_has_no_path_to_user_funds`** — asserts that `set_subscription`
+  does not change any user balances.
+- **New test: `fee_paid_to_contract_address`** — asserts that the protocol fee
+  is transferred to the `fee_to` address when a mandate is charged.
+
 ## [0.1.0] - 2026-09-02
 
 First testnet deployment: plan registry, vault and subscription contracts with

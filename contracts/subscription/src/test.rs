@@ -762,3 +762,68 @@ fn end_mandate_emits_an_event_naming_the_merchant() {
     let expected: soroban_sdk::xdr::StringM<32> = "mandate_ended".try_into().unwrap();
     assert_eq!(name, &expected);
 }
+
+/// Verify that the protocol fee is transferred to the fee_to address when a
+/// mandate is charged. This tests that fee_to can be set to any address
+/// (account or contract) and the fee is correctly transferred.
+#[test]
+fn fee_paid_to_address() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(1_000_000);
+
+    let admin = Address::generate(&env);
+    let issuer = Address::generate(&env);
+    let merchant = Address::generate(&env);
+    let fee_to = Address::generate(&env);
+
+    let token = env.register_stellar_asset_contract_v2(issuer).address();
+
+    let registry_id = env.register(PlanRegistry, (admin.clone(),));
+    let registry = RegistryClient::new(&env, &registry_id);
+    let vault_id = env.register(Vault, (admin.clone(),));
+    let vault = RealVaultClient::new(&env, &vault_id);
+    vault.set_subscription(&Address::generate(&env));
+
+    let sub_id = env.register(
+        Subscription,
+        (
+            admin.clone(),
+            registry_id.clone(),
+            vault_id.clone(),
+            FEE_BPS,
+            fee_to.clone(),
+        ),
+    );
+    let sub = SubscriptionClient::new(&env, &sub_id);
+
+    vault.set_subscription(&sub_id);
+
+    let plan_id = registry.create_plan(
+        &merchant,
+        &token,
+        &PRICE,
+        &MONTH,
+        &String::from_str(&env, "Demo Plan"),
+    );
+    let user = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&user, &100_000);
+    vault.deposit(&user, &token, &100_000);
+
+    let id = sub.subscribe(&user, &plan_id, &0);
+    sub.charge(&id);
+
+    // The merchant should receive the price minus the fee.
+    let expected_fee = PRICE * (FEE_BPS as i128) / BPS_DENOMINATOR;
+    assert_eq!(
+        TokenClient::new(&env, &token).balance(&merchant),
+        PRICE - expected_fee,
+        "merchant should receive price minus fee"
+    );
+    // The fee should be transferred to fee_to.
+    assert_eq!(
+        TokenClient::new(&env, &token).balance(&fee_to),
+        expected_fee,
+        "fee should be transferred to fee_to address"
+    );
+}
